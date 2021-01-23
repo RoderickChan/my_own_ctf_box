@@ -6,9 +6,9 @@
 
 ### 1.shellcode
 
-**解释：**控制程序执行机器码指令
+**解释**：控制程序执行机器码指令
 
-**使用条件：**可以控制EIP寄存器，程序关闭了NX保护或者某个可读可写段具有可执行权限。可以结合mprotect函数或者mmap函数执行攻击。
+**使用条件**：可以控制EIP寄存器，程序关闭了NX保护或者某个可读可写段具有可执行权限。可以结合mprotect函数或者mmap函数执行攻击。
 
 当程序关闭了NX保护，这个时候可以考虑shellcode，shellcode不一定是获取shell，也可以是ORW的shell，即为open(/flag)------read(3, addr, 0x30)------write(1, addr, 0x30)。
 
