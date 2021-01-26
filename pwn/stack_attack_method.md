@@ -185,7 +185,7 @@ def ret2libc_amd64_mannual():
     '''
     elf = Elf('')
     io = process('')
-    pop_rdi_ret_addr = 0x0 # 一下三个都是gadget，可以利用ROPgadget工具寻找
+    pop_rdi_ret_addr = 0x0 # 以下三个都是gadget，可以利用ROPgadget工具寻找
     pop_rsi_ret_addr = 0x0
     pop_rdx_ret_addr = 0x0
     payload = b'xxx' # 前面的偏移，直到函数返回地址
