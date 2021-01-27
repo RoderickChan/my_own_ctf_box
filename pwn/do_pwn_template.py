@@ -115,7 +115,7 @@ if FILENAME:
 
 def LOG_ADDR(addr_name:str, addr:int):
     if LOCAL_LOG:
-        log.success("{} ===> {}".format(addr_name, addr))
+        log.success("{} ===> {}".format(addr_name, hex(addr)))
     else:
         pass
 
