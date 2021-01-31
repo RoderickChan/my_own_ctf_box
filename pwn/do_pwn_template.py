@@ -25,8 +25,9 @@ LOCAL_LOG = 1 # 本地LOG是否开启
 PWN_LOG_LEVEL = 'debug' # pwntools的log级别设置
 STOP_FUNCTION = 1 # STOP方法是否开启
 
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
-@click.command()
+@click.command(context_settings=CONTEXT_SETTINGS, short_help='Do pwn!')
 @click.argument('filename', nargs=1, type=str, required=0, default=None)
 @click.option('-d', '--debug', default=True, type=bool, nargs=1, help='Excute program at local env or remote env. Default value: True.')
 @click.option('-t', '--tmux', default=False, type=bool, nargs=1, help='Excute program at tmux or not. Default value: False.')
@@ -132,6 +133,9 @@ def STOP(idx:int=-1):
 
 
 context.update(log_level=PWN_LOG_LEVEL)
+
+# 一般需要带上文件
+assert FILENAME is not None, 'give me a file!'
 ##########################################
 ##############以下为攻击代码###############
 ##########################################
