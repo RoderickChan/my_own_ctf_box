@@ -138,6 +138,8 @@ def stack_pivot_attack(io, elf, leave_ret_addr:int, fake_rbp_addr:int):
     
     # 之后，程序会取执行rop链
     
+def ret2sigreturn():
+    pass
     
     
     
