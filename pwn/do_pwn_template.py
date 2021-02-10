@@ -4,6 +4,7 @@ import click
 import sys
 import os
 import time
+import functools
 '''
 本脚本为做buuctf上的pwn题所编写，利用click模块配置命令行参数，
 能方便地进行本地调试和远程解题。
@@ -125,13 +126,31 @@ def STOP(idx:int=-1):
     if not STOP_FUNCTION:
         return
     if idx != -1:
-        input("stop...{} {}".format(idx, proc.pidof(io)))
+        print("stop...{} {}".format(idx, proc.pidof(io)))
     else:
         global STOP_COUNT
-        input("stop...{}  {}".format(STOP_COUNT, proc.pidof(io)))
+        print("stop...{}  {}".format(STOP_COUNT, proc.pidof(io)))
         STOP_COUNT += 1
+    pause()
 
+# 定义int16
+in16 = functools.partial(int, base=16)
 
+def time_count(func):
+    '''
+    定义统计函数运行时间的装饰器
+    '''
+    @functools.wraps(func)
+    def wrapper(*args, **kw):
+        print('=' * 50)
+        print('function #{}# start...'.format(func.__name__))
+        start = time.time()
+        res = func(*args, **kw)
+        end = time.time()
+        print('function #{}# end...execute time: {} s / {} min'.format(func.__name__, end - start, (end - start) / 60))
+    return wrapper
+
+    
 context.update(log_level=PWN_LOG_LEVEL)
 
 # 一般需要带上文件
