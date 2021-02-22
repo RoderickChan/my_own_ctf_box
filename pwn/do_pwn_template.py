@@ -121,6 +121,25 @@ def LOG_ADDR(addr_name:str, addr:int):
     else:
         pass
 
+
+def LOG_ADDR_EX(addr_name:str):
+    '''
+    存储地址的变量名，字符串
+    如：a = 0xdeadbeef 
+    调用: LOG_ADDR_EX('a')
+    
+    '''
+    if LOCAL_LOG:
+        # 利用eval函数, 首先检索一下
+        if addr_name in globals() or addr_name in vars():
+            tmp_var = eval(addr_name)
+            log.success("{} ===> {}".format(addr_name, hex(tmp_var)))
+        else:
+            log.warn("No variable named: '" + addr_name + "'")
+    else:
+        pass
+    
+
 STOP_COUNT = 0
 def STOP(idx:int=-1):
     if not STOP_FUNCTION:
@@ -133,31 +152,63 @@ def STOP(idx:int=-1):
         STOP_COUNT += 1
     pause()
 
-# 定义int16
-in16 = functools.partial(int, base=16)
+
+############### 定义一些偏函数 ###################
+
+int16 = functools.partial(int, base=16)
+
+#################### END ########################
+
+
+############### 定义一些装饰器函数 ###############
 
 def time_count(func):
     '''
-    定义统计函数运行时间的装饰器
+    装饰器：统计函数运行时间
     '''
     @functools.wraps(func)
-    def wrapper(*args, **kw):
+    def wrapper(*args, **kwargs):
         print('=' * 50)
         print('function #{}# start...'.format(func.__name__))
         start = time.time()
-        res = func(*args, **kw)
+        res = func(*args, **kwargs)
         end = time.time()
         print('function #{}# end...execute time: {} s / {} min'.format(func.__name__, end - start, (end - start) / 60))
+        return res
     return wrapper
 
+
+def sleep_call(second:int=1, mod:int=1):
+    """
+    装饰器：在调用函数前后线程先睡眠指定秒数
     
+    Args:
+        second: 休眠秒数
+        mod: 0 不休眠; 1 为调用前休眠; 2 为调用后休眠; 3 为前后均修眠
+    """
+    if mod > 3 or mod < 0:
+        mod = 1
+    def wrapper1(func):
+        @functools.wraps(func)
+        def wrapper2(*args, **kwargs):
+            if mod & 1:
+                time.sleep(second)
+            res = func(*args, **kwargs)
+            if mod & 2:
+                time.sleep(second)
+            return res
+        return wrapper2
+    return wrapper1
+    
+#################### END ########################
+
 context.update(log_level=PWN_LOG_LEVEL)
 
 # 一般需要带上文件
 assert FILENAME is not None, 'give me a file!'
-##########################################
-##############以下为攻击代码###############
-##########################################
+##################################################
+##############以下为攻击代码#######################
+##################################################
 
 
 io.interactive()

