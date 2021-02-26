@@ -3,6 +3,7 @@ import sys
 import os
 '''
 I get this file from https://github.com/Holy-Shine/GitToc/blob/master/gitToc.py
+Add [toc] for markdown file
 '''
 
 headline_dic={'#':0,'##':1,'###':2,'####':3,'#####':4,'######':5}
@@ -12,7 +13,9 @@ def writefile(fp, str=None):
         f.write(str)
 
 def detectHeadLines(f):
-    '''detact headline and return inserted string.
+    '''
+    detact headline and return inserted string.
+    
     params:
         f: Markdown file
     '''

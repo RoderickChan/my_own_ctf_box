@@ -105,9 +105,9 @@ if TMUX:
     context.update(terminal=['tmux', 'splitw', '-h'])
     if GDB_BREAKPOINT is None:
         gdb.attach(io)
-    elif '0x' in GDB_BREAKPOINT:
-        gdb.attach(io, gdbscript='b *{}\nc\n'.format(GDB_BREAKPOINT))
     else:
+        if '0x' in GDB_BREAKPOINT:
+            GDB_BREAKPOINT = '*' + GDB_BREAKPOINT
         gdb.attach(io, gdbscript='b {}\nc\n'.format(GDB_BREAKPOINT))
 
 
