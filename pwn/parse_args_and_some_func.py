@@ -1,0 +1,240 @@
+'''
+==========================================================================================
+本脚本为pwn题所编写，利用click模块配置命令行参数，
+能方便地进行本地调试和远程解题。
+本地命令示例：
+    python3 exp.py filename --tmux 1 --gdb-breakpoint 0x804802a --gdb-breakpoint printf
+    python3 exp.py filename -t 1 -gb 0x804802a -gb printf
+    python3 exp.py filename -t 1 -gs "x /12gx $rebase(0x202080)" -sf 0 -pl "warn"
+    即可开始本地调试,并且会断在地址或函数处。先启动tmux后，--tmux才会有效。
+
+远程命令示例：
+    python3 exp.py filename -i 127.0.0.1 -p 22164
+    可以连接指定的IP和端口。目前在刷buuctf上的题，所以填了默认ip，只指定端口即可。
+
+修改后，本脚本只提供对外接口，使用方式为：from parse_args_and_some_func import *
+通过all_parsed_args访问所有的参数，包括本地或远程的io
+==========================================================================================
+
+'''
+print(__doc__)
+
+from pwn import *
+from LibcSearcher import LibcSearcher
+import click
+from collections import OrderedDict
+import sys
+import os
+import time
+import functools
+# 所有的参数
+all_parsed_args =OrderedDict([('filename', None), # 要执行的二进制文件名，或路径
+            ('debug_enable', 1), # 是否开启调试模式
+            ('tmux_enable', 0), # 是否开启tmux终端，使用gdb.attach(io)的方式
+            ('gdb_breakpoint', None), # 当tmux开启的时候，b开头的断点的设置，是一个list
+            ('gdb_script', None), # tmux开启的时候，自定义脚本的设置
+            ('ip', None), # 远程连接的IP
+            ('port', None), # 远程连接的端口
+            ('local_log', 1), # 本地LOG函数是否开启
+            ('pwn_log_level', 'debug'), # pwntools的log级别设置
+            ('stop_function_enable', 1),  # STOP方法是否开启
+            ('io', None), # process or remote object
+            ('cur_elf', None) # current elf file
+            ])
+
+not_print_list = ('io', 'cur_elf')
+
+__default_ip = 'node3.buuoj.cn'
+
+def __change():
+    '''
+    只有DEBUG开启的时候，才有tmux
+    IP和PORT给定后，必须关闭DEBUG, 这个级别最高
+    '''
+    global all_parsed_args
+    if all_parsed_args['port'] or all_parsed_args['ip']:
+        if all_parsed_args['ip'] is None:
+            all_parsed_args['ip'] = __default_ip
+        all_parsed_args['debug_enable'] = 0
+    
+    if not all_parsed_args['debug_enable']:
+        all_parsed_args['tmux_enable'] = 0
+    
+    if not all_parsed_args['tmux_enable']:
+        all_parsed_args['gdb_breakpoint'] = None
+        all_parsed_args['gdb_script'] = None
+    
+    
+def __check():
+    '''
+    检查参数是否合法
+    '''
+    assert not (all_parsed_args['filename'] is None and all_parsed_args['debug_enable'] == 1), "at least 'filename' or 'debug_enable'"
+    assert not (all_parsed_args['port'] is None and all_parsed_args['debug_enable'] == 0), "at least 'port' or 'debug_enable'"
+    assert not (all_parsed_args['ip'] is not None and all_parsed_args['port'] is None), "at least 'port'"
+    assert not (all_parsed_args['gdb_breakpoint'] is not None and all_parsed_args['gdb_script'] is not None), "'gdb-breakpoint' and 'gdb-script' cannot be both identified!"
+
+
+def print_parsed_args_info(log_black_list:bool=False, log_none:bool=False):
+    '''
+    打印所有的参数信息
+    '''
+    click.echo('=' * 90)
+    click.echo(' [+] Args info:\n')
+    for key, val in all_parsed_args.items():
+        if (not log_black_list) and (key in not_print_list):
+            continue
+        if (not log_none) and (not key):
+            continue 
+        click.echo('  {}: {}'.format(key, val))
+    click.echo('=' * 90)
+
+
+def __set_value():
+    """设置各种值"""
+    global all_parsed_args
+    if all_parsed_args['debug_enable']:
+        all_parsed_args['io'] = process('{}'.format(all_parsed_args['filename']))
+    else:
+        all_parsed_args['io'] = remote(all_parsed_args['ip'], all_parsed_args['port'])
+
+    if all_parsed_args['tmux_enable']:
+        context.update(terminal=['tmux', 'splitw', '-h'])
+        tmp_all_gdb = ""
+        if all_parsed_args['gdb_breakpoint'] is not None or len(all_parsed_args['gdb_breakpoint']) > 0:
+            # 解析每一条gdb-breakpoint
+            for gb in all_parsed_args['gdb_breakpoint']:
+                if gb.startswith('0x') or gb.startswith('$rebase('):
+                    tmp_all_gdb += "b *{}\n".format(gb) # 带上*
+                else: # 传入函数
+                    tmp_all_gdb += "b {}\n".format(gb) # 不带*
+        elif all_parsed_args['gdb_script'] is not None:
+            tmp_all_gdb += all_parsed_args['gdb_script'] + "\n"
+        tmp_all_gdb += "c\n"
+        gdb.attach(io, gdbscript=tmp_all_gdb)
+
+    if all_parsed_args['filename']:
+        all_parsed_args['cur_elf'] = ELF('{}'.format(all_parsed_args['filename']))
+        log.info('[+] libc used ===> {}'.format(all_parsed_args['cur_elf'].libc))
+
+
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+@click.command(context_settings=CONTEXT_SETTINGS, short_help='Do pwn!')
+@click.argument('filename', nargs=1, type=str, required=0, default=None)
+@click.option('-d', '--debug', default=True, type=bool, nargs=1, help='Excute program at local env or remote env. Default value: True.')
+@click.option('-t', '--tmux', default=False, type=bool, nargs=1, help='Excute program at tmux or not. Default value: False.')
+@click.option('-gb', '--gdb-breakpoint', default=[], type=str, multiple=True, help="Set a gdb breakpoint while tmux is enabled, is a hex address or '$rebase' addr or a function name. Multiple setting supported. Default value:'[]'")
+@click.option('-gs', '--gdb-script', default=None, type=str, help='Set a gdb script while tmux is enabled, the script will be passed to gdb and cannot be identified with gdb-breakpoint simultaneously. Default value:None')
+@click.option('-i', '--ip', default=None, type=str, nargs=1, help='The remote ip addr. Default value: None.')
+@click.option('-p', '--port', default=None, type=int, nargs=1, help='The remote port. Default value: None.')
+@click.option('-ll', '--local-log', default=True, type=bool, nargs=1, help='Set local log enabled or not. Default value: True.')
+@click.option('-pl', '--pwn-log', type=click.Choice(['debug', 'info', 'warn', 'error', 'notset']), nargs=1, default='debug', help='Set pwntools log level. Default value: debug.')
+@click.option('-sf', '--stop-function', default=True, type=bool, nargs=1, help='Set stop function enabled or not. Default value: True.')
+def __parse_command_args(filename, debug, tmux, gdb_breakpoint, gdb_script,
+                         ip, port, local_log, pwn_log, stop_function):
+    '''FILENAME: The filename of current directory to pwn'''
+    global all_parsed_args
+    # 赋值
+    all_parsed_args['filename'] = filename
+    all_parsed_args['debug_enable'] = debug
+    all_parsed_args['tmux_enable'] = tmux
+    all_parsed_args['gdb_breakpoint'] = gdb_breakpoint
+    all_parsed_args['gdb_script'] = gdb_script
+    all_parsed_args['ip'] = ip
+    all_parsed_args['port'] = port
+    all_parsed_args['local_log'] = local_log
+    all_parsed_args['pwn_log_level'] = pwn_log
+    all_parsed_args['stop_function_enable'] = stop_function
+
+    # change
+    __change()
+    
+    # check
+    __check()
+    
+    # print
+    print_parsed_args_info(False, True)
+
+
+__parse_command_args.main(standalone_mode=False)
+
+# print_parsed_args_info(False, True)
+# 退出条件，只要参数有 -h 或 --help就退出
+if len(sys.argv) > 1:
+    for arg in sys.argv:
+        if '-h' == arg or '--help' == arg:
+            sys.exit(0)
+
+__set_value()
+
+
+# 定义一些函数
+def LOG_ADDR(addr_name:str, addr:int):
+    """使用log.success打印地址"""
+    if LOCAL_LOG:
+        log.success("{} ===> {}".format(addr_name, hex(addr)))
+    else:
+        pass
+
+    
+STOP_COUNT = 0
+def STOP(idx:int=-1):
+    """程序暂停，按任意键继续"""
+    if not STOP_FUNCTION_ENABLE:
+        return
+    if idx != -1:
+        print("stop...{} pid: {}".format(idx, proc.pidof(io)))
+    else:
+        global STOP_COUNT
+        print("stop...{}  pid: {}".format(STOP_COUNT, proc.pidof(io)))
+        STOP_COUNT += 1
+    pause()
+
+
+############### 定义一些偏函数 ###################
+int16 = functools.partial(int, base=16)
+
+#################### END ########################
+
+
+
+############### 定义一些装饰器函数 ###############
+def time_count(func):
+    '''
+    装饰器：统计函数运行时间
+    '''
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        print('=' * 50)
+        print('function #{}# start...'.format(func.__name__))
+        start = time.time()
+        res = func(*args, **kwargs)
+        end = time.time()
+        print('function #{}# end...execute time: {} s / {} min'.format(func.__name__, end - start, (end - start) / 60))
+        return res
+    return wrapper
+
+
+def sleep_call(second:int=1, mod:int=1):
+    """
+    装饰器：在调用函数前后线程先睡眠指定秒数
+    
+    Args:
+        second: 休眠秒数
+        mod: 0 不休眠; 1 为调用前休眠; 2 为调用后休眠; 3 为前后均修眠
+    """
+    if mod > 3 or mod < 0:
+        mod = 1
+    def wrapper1(func):
+        @functools.wraps(func)
+        def wrapper2(*args, **kwargs):
+            if mod & 1:
+                time.sleep(second)
+            res = func(*args, **kwargs)
+            if mod & 2:
+                time.sleep(second)
+            return res
+        return wrapper2
+    return wrapper1
+
+#################### END ########################
