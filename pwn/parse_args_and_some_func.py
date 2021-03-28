@@ -111,7 +111,7 @@ def __set_value():
         elif all_parsed_args['gdb_script'] is not None:
             tmp_all_gdb += all_parsed_args['gdb_script'] + "\n"
         tmp_all_gdb += "c\n"
-        gdb.attach(io, gdbscript=tmp_all_gdb)
+        gdb.attach(all_parsed_args['io'], gdbscript=tmp_all_gdb)
 
     if all_parsed_args['filename']:
         all_parsed_args['cur_elf'] = ELF('{}'.format(all_parsed_args['filename']))
