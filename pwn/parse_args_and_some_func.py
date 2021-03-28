@@ -171,7 +171,7 @@ __set_value()
 # 定义一些函数
 def LOG_ADDR(addr_name:str, addr:int):
     """使用log.success打印地址"""
-    if LOCAL_LOG:
+    if all_parsed_args['local_log']:
         log.success("{} ===> {}".format(addr_name, hex(addr)))
     else:
         pass
@@ -180,13 +180,13 @@ def LOG_ADDR(addr_name:str, addr:int):
 STOP_COUNT = 0
 def STOP(idx:int=-1):
     """程序暂停，按任意键继续"""
-    if not STOP_FUNCTION_ENABLE:
+    if not all_parsed_args['stop_function_enable']:
         return
     if idx != -1:
-        print("stop...{} pid: {}".format(idx, proc.pidof(io)))
+        print("stop...{} pid: {}".format(idx, proc.pidof(all_parsed_args['io'])))
     else:
         global STOP_COUNT
-        print("stop...{}  pid: {}".format(STOP_COUNT, proc.pidof(io)))
+        print("stop...{}  pid: {}".format(STOP_COUNT, proc.pidof(all_parsed_args['io'])))
         STOP_COUNT += 1
     pause()
 
