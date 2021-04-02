@@ -42,8 +42,10 @@ all_parsed_args =OrderedDict([('filename', None), # 要执行的二进制文件�
             ('cur_elf', None) # current elf file
             ])
 
+# 不打印的名单，不会通过print_parsed_args_info打印出来
 not_print_list = ('io', 'cur_elf')
 
+# 默认的远程ip, 只指定port的时候会默认赋值
 __default_ip = 'node3.buuoj.cn'
 
 def __change():
@@ -117,7 +119,10 @@ def __set_value():
         all_parsed_args['cur_elf'] = ELF('{}'.format(all_parsed_args['filename']))
         log.info('[+] libc used ===> {}'.format(all_parsed_args['cur_elf'].libc))
 
+    # 更新context
+    context.update(log_level=PWN_LOG_LEVEL)
 
+    
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 @click.command(context_settings=CONTEXT_SETTINGS, short_help='Do pwn!')
 @click.argument('filename', nargs=1, type=str, required=0, default=None)
@@ -158,15 +163,19 @@ def __parse_command_args(filename, debug, tmux, gdb_breakpoint, gdb_script,
 
 __parse_command_args.main(standalone_mode=False)
 
-# print_parsed_args_info(False, True)
 # 退出条件，只要参数有 -h 或 --help就退出
 if len(sys.argv) > 1:
     for arg in sys.argv:
         if '-h' == arg or '--help' == arg:
+            # 打印一下all_parsed_args中所有的键
+            click.echo('\n' + '=' * 90)
+            click.echo("All keys in 'all_parsed_args': ")
+            for key, _ in all_parsed_args.items():
+                click.echo("  {}".format(key))
+            click.echo('=' * 90)
             sys.exit(0)
 
 __set_value()
-
 
 # 定义一些函数
 def LOG_ADDR(addr_name:str, addr:int):

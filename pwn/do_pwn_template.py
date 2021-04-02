@@ -1,3 +1,21 @@
+'''
+==========================================================================================
+本脚本为pwn题所编写，利用click模块配置命令行参数，
+能方便地进行本地调试和远程解题。
+本地命令示例：
+    python3 exp.py filename --tmux 1 --gdb-breakpoint 0x804802a --gdb-breakpoint printf
+    python3 exp.py filename -t 1 -gb 0x804802a -gb printf
+    python3 exp.py filename -t 1 -gs "x /12gx $rebase(0x202080)" -sf 0 -pl "warn"
+    即可开始本地调试,并且会断在地址或函数处。先启动tmux后，--tmux才会有效。
+
+远程命令示例：
+    python3 exp.py filename -i 127.0.0.1 -p 22164
+    python3 exp.py filename -p 22164
+    可以连接指定的IP和端口。目前在刷buuctf上的题，所以填了默认ip，只指定端口即可。
+
+==========================================================================================
+
+'''
 from pwn import *
 from LibcSearcher import LibcSearcher
 import click
@@ -5,21 +23,14 @@ import sys
 import os
 import time
 import functools
-'''
-本脚本为做buuctf上的pwn题所编写，利用click模块配置命令行参数，
-能方便地进行本地调试和远程解题。
-本地命令：
-    python3 exp.py filename --tmux 1 --gdb-breakpoint 0x804802a
-    即可开始本地调试,并且会断在地址或函数处 建议启动tmux。tmux是一个窗口管理神器！
-远程命令：
-    python3 exp.py filename -i 127.0.0.1 -p 22164
-    可以连接指定的IP和端口。目前在刷buuctf上的题，所以填了默认ip，只指定端口即可。
-'''
+
+print(__doc__)
 
 FILENAME = '#' # 要执行的文件名
 DEBUG = 1 # 是否为调试模式
 TMUX = 0 # 是否开启TMUX
 GDB_BREAKPOINT = None # 当tmux开启的时候，断点的设置
+GDB_SCRIPT = None # 当tmux开启的时候, gdb_script的设置，可以是任意有效的语句
 IP = None # 远程连接的IP
 PORT = None # 远程连接的端口
 LOCAL_LOG = 1 # 本地LOG是否开启
@@ -32,21 +43,23 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 @click.argument('filename', nargs=1, type=str, required=0, default=None)
 @click.option('-d', '--debug', default=True, type=bool, nargs=1, help='Excute program at local env or remote env. Default value: True.')
 @click.option('-t', '--tmux', default=False, type=bool, nargs=1, help='Excute program at tmux or not. Default value: False.')
-@click.option('-gb', '--gdb-breakpoint', default=None, type=str, help='Set a gdb breakpoint while tmux is enabled, is a hex address or a function name. Default value:None')
+@click.option('-gb', '--gdb-breakpoint', default=[], type=str, multiple=True, help="Set a gdb breakpoint while tmux is enabled, is a hex address or '$rebase' addr or a function name. Multiple setting supported. Default value:'[]'")
+@click.option('-gs', '--gdb-script', default=None, type=str, help='Set a gdb script while tmux is enabled, the script will be passed to gdb and cannot be identified with gdb-breakpoint simultaneously. Default value:None')
 @click.option('-i', '--ip', default=None, type=str, nargs=1, help='The remote ip addr. Default value: None.')
 @click.option('-p', '--port', default=None, type=int, nargs=1, help='The remote port. Default value: None.')
 @click.option('-ll', '--local-log', default=True, type=bool, nargs=1, help='Set local log enabled or not. Default value: True.')
 @click.option('-pl', '--pwn-log', type=click.Choice(['debug', 'info', 'warn', 'error', 'notset']), nargs=1, default='debug', help='Set pwntools log level. Default value: debug.')
 @click.option('-sf', '--stop-function', default=True, type=bool, nargs=1, help='Set stop function enabled or not. Default value: True.')
-def parse_command_args(filename, debug, tmux, gdb_breakpoint, ip, 
-                       port, local_log, pwn_log, stop_function):
+def parse_command_args(filename, debug, tmux, gdb_breakpoint, gdb_script,
+                       ip, port, local_log, pwn_log, stop_function):
     '''FILENAME: The filename of current directory to pwn'''
-    global FILENAME, DEBUG, TMUX, GDB_BREAKPOINT, IP, PORT, LOCAL_LOG, PWN_LOG_LEVEL, STOP_FUNCTION
+    global FILENAME, DEBUG, TMUX, GDB_BREAKPOINT, GDB_SCRIPT, IP, PORT, LOCAL_LOG, PWN_LOG_LEVEL, STOP_FUNCTION
     # assign
     FILENAME = filename
     DEBUG = debug
     TMUX = tmux
     GDB_BREAKPOINT = gdb_breakpoint
+    GDB_SCRIPT = gdb_script
     IP = ip
     PORT = port
     LOCAL_LOG = local_log
@@ -59,6 +72,7 @@ def parse_command_args(filename, debug, tmux, gdb_breakpoint, ip,
         TMUX = 0
         STOP_FUNCTION = 0
         GDB_BREAKPOINT = None
+        GDB_SCRIPT = None
         if IP is None:
             IP = 'node3.buuoj.cn'
     
@@ -93,27 +107,38 @@ def parse_command_args(filename, debug, tmux, gdb_breakpoint, ip,
 
 parse_command_args.main(standalone_mode=False)
 
-if len(sys.argv) == 2 and sys.argv[1] == '--help':
-    sys.exit(0)
+# 退出条件，只要参数有 -h 或 --help就退出
+if len(sys.argv) > 1:
+    for arg in sys.argv:
+        if '-h' == arg or '--help' == arg:
+            sys.exit(0)
 
 if DEBUG:
-    io = process('./{}'.format(FILENAME))
+    io = process('{}'.format(FILENAME))
 else:
     io = remote(IP, PORT)
 
 if TMUX:
     context.update(terminal=['tmux', 'splitw', '-h'])
-    if GDB_BREAKPOINT is None:
-        gdb.attach(io)
-    else:
-        if '0x' in GDB_BREAKPOINT:
-            GDB_BREAKPOINT = '*' + GDB_BREAKPOINT
-        gdb.attach(io, gdbscript='b {}\nc\n'.format(GDB_BREAKPOINT))
+    tmp_all_gdb = ""
+    if GDB_BREAKPOINT is not None or len(GDB_BREAKPOINT) > 0:
+        # 解析每一条gdb-breakpoint
+        for gb in GDB_BREAKPOINT:
+            if gb.startswith('0x') or gb.startswith('$rebase('):
+                tmp_all_gdb += "b *{}\n".format(gb) # 带上*
+            else: # 传入函数
+                tmp_all_gdb += "b {}\n".format(gb) # 不带*
+    elif GDB_SCRIPT is not None:
+        tmp_all_gdb += GDB_SCRIPT + "\n"
+    tmp_all_gdb += "c\n"
+    gdb.attach(io, gdbscript=tmp_all_gdb)
 
 
 if FILENAME:
-    cur_elf = ELF('./{}'.format(FILENAME))
+    cur_elf = ELF('{}'.format(FILENAME))
     print('[+] libc used ===> {}'.format(cur_elf.libc))
+
+
 
 def LOG_ADDR(addr_name:str, addr:int):
     if LOCAL_LOG:
@@ -210,8 +235,6 @@ assert FILENAME is not None, 'give me a file!'
 ##############以下为攻击代码#######################
 ##################################################
 
-
-io.interactive()
 
 
 
