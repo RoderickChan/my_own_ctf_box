@@ -1,3 +1,12 @@
+#!/usr/bin/python3
+# -*- encoding: utf-8 -*-
+
+# @File    : do_pwn_template.py
+# @Time    : 2021/04/02 21:15:43
+# @Author  : Roderick Chan
+# @Email   : ch22166@163.com
+# @Desc    : pwn题本地调试、远程攻击脚本
+
 '''
 ==========================================================================================
 本脚本为pwn题所编写，利用click模块配置命令行参数，
@@ -14,8 +23,8 @@
     可以连接指定的IP和端口。目前在刷buuctf上的题，所以填了默认ip，只指定端口即可。
 
 ==========================================================================================
-
 '''
+
 from pwn import *
 from LibcSearcher import LibcSearcher
 import click
@@ -229,12 +238,8 @@ def sleep_call(second:int=1, mod:int=1):
 
 context.update(log_level=PWN_LOG_LEVEL)
 
-# 一般需要带上文件
+# 一般需要带上文件，可注释改行语句
 assert FILENAME is not None, 'give me a file!'
 ##################################################
 ##############以下为攻击代码#######################
 ##################################################
-
-
-
-
