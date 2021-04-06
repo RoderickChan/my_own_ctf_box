@@ -5,7 +5,7 @@
 本地命令示例：
     python3 exp.py filename --tmux 1 --gdb-breakpoint 0x804802a --gdb-breakpoint printf
     python3 exp.py filename -t 1 -gb 0x804802a -gb printf
-    python3 exp.py filename -t 1 -gs "x /12gx $rebase(0x202080)" -sf 0 -pl "warn"
+    python3 exp.py filename -t 1 -gs "x /12gx \$rebase(0x202080)" -sf 0 -pl "warn"
     即可开始本地调试,并且会断在地址或函数处。先启动tmux后，--tmux才会有效。
 
 远程命令示例：
@@ -74,7 +74,6 @@ def __check():
     assert not (all_parsed_args['filename'] is None and all_parsed_args['debug_enable'] == 1), "at least 'filename' or 'debug_enable'"
     assert not (all_parsed_args['port'] is None and all_parsed_args['debug_enable'] == 0), "at least 'port' or 'debug_enable'"
     assert not (all_parsed_args['ip'] is not None and all_parsed_args['port'] is None), "at least 'port'"
-    assert not (all_parsed_args['gdb_breakpoint'] is not None and all_parsed_args['gdb_script'] is not None), "'gdb-breakpoint' and 'gdb-script' cannot be both identified!"
 
 
 def print_parsed_args_info(log_black_list:bool=False, log_none:bool=False):
@@ -110,8 +109,8 @@ def __set_value():
                     tmp_all_gdb += "b *{}\n".format(gb) # 带上*
                 else: # 传入函数
                     tmp_all_gdb += "b {}\n".format(gb) # 不带*
-        elif all_parsed_args['gdb_script'] is not None:
-            tmp_all_gdb += all_parsed_args['gdb_script'] + "\n"
+        if all_parsed_args['gdb_script'] is not None:
+            tmp_all_gdb += all_parsed_args['gdb_script'].replace("\\n", "\n").replace(";", "\n") + "\n"
         tmp_all_gdb += "c\n"
         gdb.attach(all_parsed_args['io'], gdbscript=tmp_all_gdb)
 
@@ -120,7 +119,7 @@ def __set_value():
         log.info('[+] libc used ===> {}'.format(all_parsed_args['cur_elf'].libc))
 
     # 更新context
-    context.update(log_level=PWN_LOG_LEVEL)
+    context.update(log_level=all_parsed_args['pwn_log_level'])
 
     
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
@@ -128,8 +127,8 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 @click.argument('filename', nargs=1, type=str, required=0, default=None)
 @click.option('-d', '--debug', default=True, type=bool, nargs=1, help='Excute program at local env or remote env. Default value: True.')
 @click.option('-t', '--tmux', default=False, type=bool, nargs=1, help='Excute program at tmux or not. Default value: False.')
-@click.option('-gb', '--gdb-breakpoint', default=[], type=str, multiple=True, help="Set a gdb breakpoint while tmux is enabled, is a hex address or '$rebase' addr or a function name. Multiple setting supported. Default value:'[]'")
-@click.option('-gs', '--gdb-script', default=None, type=str, help='Set a gdb script while tmux is enabled, the script will be passed to gdb and cannot be identified with gdb-breakpoint simultaneously. Default value:None')
+@click.option('-gb', '--gdb-breakpoint', default=[], type=str, multiple=True, help="Set a gdb breakpoint while tmux is enabled, is a hex address or '\$rebase' addr or a function name. Multiple setting supported. Default value:'[]'")
+@click.option('-gs', '--gdb-script', default=None, type=str, help="Set a gdb script while tmux is enabled, the script will be passed to gdb and use '\\n' or ';' to split lines. Default value:None")
 @click.option('-i', '--ip', default=None, type=str, nargs=1, help='The remote ip addr. Default value: None.')
 @click.option('-p', '--port', default=None, type=int, nargs=1, help='The remote port. Default value: None.')
 @click.option('-ll', '--local-log', default=True, type=bool, nargs=1, help='Set local log enabled or not. Default value: True.')
@@ -186,17 +185,11 @@ def LOG_ADDR(addr_name:str, addr:int):
         pass
 
     
-STOP_COUNT = 0
-def STOP(idx:int=-1):
+def STOP():
     """程序暂停，按任意键继续"""
     if not all_parsed_args['stop_function_enable']:
         return
-    if idx != -1:
-        print("stop...{} pid: {}".format(idx, proc.pidof(all_parsed_args['io'])))
-    else:
-        global STOP_COUNT
-        print("stop...{}  pid: {}".format(STOP_COUNT, proc.pidof(all_parsed_args['io'])))
-        STOP_COUNT += 1
+    print("stop at line...{} pid:{}".format(sys._getframe().f_lineno, proc.pidof(all_parsed_args['io'])))
     pause()
 
 
