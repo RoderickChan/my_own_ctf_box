@@ -6,7 +6,9 @@
     python3 exp.py filename --tmux 1 --gdb-breakpoint 0x804802a --gdb-breakpoint printf
     python3 exp.py filename -t 1 -gb 0x804802a -gb printf
     python3 exp.py filename -t 1 -gs "x /12gx \$rebase(0x202080)" -sf 0 -pl "warn"
-    即可开始本地调试,并且会断在地址或函数处。先启动tmux后，--tmux才会有效。
+    python3 exp.py filename -w 1 -gb printf
+    即可开始本地调试,并且会断在地址或函数处。
+    注意：先启动tmux后，--tmux才会有效。安装了open-wsl.exe，-w参数才会有效。
 
 远程命令示例：
     python3 exp.py filename -i 127.0.0.1 -p 22164
@@ -31,8 +33,9 @@ import functools
 all_parsed_args =OrderedDict([('filename', None), # 要执行的二进制文件名，或路径
             ('debug_enable', 1), # 是否开启调试模式
             ('tmux_enable', 0), # 是否开启tmux终端，使用gdb.attach(io)的方式
-            ('gdb_breakpoint', None), # 当tmux开启的时候，b开头的断点的设置，是一个list
-            ('gdb_script', None), # tmux开启的时候，自定义脚本的设置
+            ('open_wsl_exe', 0), # open-wsl.exe是否开启
+            ('gdb_breakpoint', None), # 当tmux或者open-wsl.exe开启的时候，b开头的断点的设置，是一个list
+            ('gdb_script', None), # tmux或者open-wsl.exe开启的时候，自定义脚本的设置
             ('ip', None), # 远程连接的IP
             ('port', None), # 远程连接的端口
             ('local_log', 1), # 本地LOG函数是否开启
@@ -50,7 +53,7 @@ __default_ip = 'node3.buuoj.cn'
 
 def __change():
     '''
-    只有DEBUG开启的时候，才有tmux
+    只有DEBUG开启的时候，才有tmux或者open-wsl.exe
     IP和PORT给定后，必须关闭DEBUG, 这个级别最高
     '''
     global all_parsed_args
@@ -61,10 +64,15 @@ def __change():
     
     if not all_parsed_args['debug_enable']:
         all_parsed_args['tmux_enable'] = 0
+        all_parsed_args['open_wsl_exe'] = 0
     
-    if not all_parsed_args['tmux_enable']:
+    if (not all_parsed_args['tmux_enable']) and (not all_parsed_args['open_wsl_exe']):
         all_parsed_args['gdb_breakpoint'] = None
         all_parsed_args['gdb_script'] = None
+    
+    # tmux的优先级高一些
+    if all_parsed_args['tmux_enable']:
+        all_parsed_args['open_wsl_exe'] = 0
     
     
 def __check():
@@ -99,8 +107,11 @@ def __set_value():
     else:
         all_parsed_args['io'] = remote(all_parsed_args['ip'], all_parsed_args['port'])
 
-    if all_parsed_args['tmux_enable']:
-        context.update(terminal=['tmux', 'splitw', '-h'])
+    if all_parsed_args['tmux_enable'] or all_parsed_args['open_wsl_exe']:
+        if all_parsed_args['tmux_enable']:
+            context.update(terminal=['tmux', 'splitw', '-h'])
+        else:
+            context.update(terminal=["open-wsl.exe", "-c"])
         tmp_all_gdb = ""
         if all_parsed_args['gdb_breakpoint'] is not None or len(all_parsed_args['gdb_breakpoint']) > 0:
             # 解析每一条gdb-breakpoint
@@ -127,14 +138,15 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 @click.argument('filename', nargs=1, type=str, required=0, default=None)
 @click.option('-d', '--debug', default=True, type=bool, nargs=1, help='Excute program at local env or remote env. Default value: True.')
 @click.option('-t', '--tmux', default=False, type=bool, nargs=1, help='Excute program at tmux or not. Default value: False.')
-@click.option('-gb', '--gdb-breakpoint', default=[], type=str, multiple=True, help="Set a gdb breakpoint while tmux is enabled, is a hex address or '\$rebase' addr or a function name. Multiple setting supported. Default value:'[]'")
-@click.option('-gs', '--gdb-script', default=None, type=str, help="Set a gdb script while tmux is enabled, the script will be passed to gdb and use '\\n' or ';' to split lines. Default value:None")
+@click.option('-w', '--open-wsl', default=False, type=bool, nargs=1, help='Excute program at open-wsl.exe or not. Default value: False.')
+@click.option('-gb', '--gdb-breakpoint', default=[], type=str, multiple=True, help="Set a gdb breakpoint while tmux or 'open-wsl.exe' is enabled, is a hex address or '\$rebase' addr or a function name. Multiple setting supported. Default value:'[]'")
+@click.option('-gs', '--gdb-script', default=None, type=str, help="Set a gdb script while tmux or 'open-wsl.exe' is enabled, the script will be passed to gdb and use '\\n' or ';' to split lines. Default value:None")
 @click.option('-i', '--ip', default=None, type=str, nargs=1, help='The remote ip addr. Default value: None.')
 @click.option('-p', '--port', default=None, type=int, nargs=1, help='The remote port. Default value: None.')
 @click.option('-ll', '--local-log', default=True, type=bool, nargs=1, help='Set local log enabled or not. Default value: True.')
 @click.option('-pl', '--pwn-log', type=click.Choice(['debug', 'info', 'warn', 'error', 'notset']), nargs=1, default='debug', help='Set pwntools log level. Default value: debug.')
 @click.option('-sf', '--stop-function', default=True, type=bool, nargs=1, help='Set stop function enabled or not. Default value: True.')
-def __parse_command_args(filename, debug, tmux, gdb_breakpoint, gdb_script,
+def __parse_command_args(filename, debug, tmux, open_wsl, gdb_breakpoint, gdb_script,
                          ip, port, local_log, pwn_log, stop_function):
     '''FILENAME: The filename of current directory to pwn'''
     global all_parsed_args
@@ -142,6 +154,7 @@ def __parse_command_args(filename, debug, tmux, gdb_breakpoint, gdb_script,
     all_parsed_args['filename'] = filename
     all_parsed_args['debug_enable'] = debug
     all_parsed_args['tmux_enable'] = tmux
+    all_parsed_args['open_wsl_exe'] = open_wsl
     all_parsed_args['gdb_breakpoint'] = gdb_breakpoint
     all_parsed_args['gdb_script'] = gdb_script
     all_parsed_args['ip'] = ip
