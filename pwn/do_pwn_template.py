@@ -142,6 +142,8 @@ if TMUX or OPEN_WSL_EXE:
     if TMUX:
         context.update(terminal=['tmux', 'splitw', '-h'])
     else:
+        # 如果有多个WLS发行版, 注意更改为下方这条设置, 修改ubuntu16, 这是发行版名称
+        # context.update(terminal=["open-wsl.exe", "-b", "-d ubuntu16", "-c"])
         context.update(terminal=['open-wsl.exe', "-c"])
     tmp_all_gdb = ""
     if GDB_BREAKPOINT is not None or len(GDB_BREAKPOINT) > 0:
