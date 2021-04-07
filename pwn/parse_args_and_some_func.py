@@ -111,6 +111,8 @@ def __set_value():
         if all_parsed_args['tmux_enable']:
             context.update(terminal=['tmux', 'splitw', '-h'])
         else:
+            # 如果有多个WLS发行版, 注意更改为下方这条设置, 修改ubuntu16, 这是发行版名称
+            # context.update(terminal=["open-wsl.exe", "-b", "-d ubuntu16", "-c"])
             context.update(terminal=["open-wsl.exe", "-c"])
         tmp_all_gdb = ""
         if all_parsed_args['gdb_breakpoint'] is not None or len(all_parsed_args['gdb_breakpoint']) > 0:
