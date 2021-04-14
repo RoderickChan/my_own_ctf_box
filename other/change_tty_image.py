@@ -22,12 +22,12 @@ help_msg = """
 Usage: 
     python change_tty_image.py [settings_path] [picture_directory] [update_frequency] [random]
 Function:
-    Change windows-termianl background image automatically.
+    Change windows-terminal background image automatically.
 Note:
     settings_path:          [required]
         The absolute path of windows-terminal setting file.
     picture_directory:      [required]
-        A absolute directory path fulled with pictures, only support 'png', 'jpg', 'jpeg'.
+        A absolute directory path fulled with pictures, only support 'png', 'jpg', 'gif'.
     update_frequency:       [required]
         The frequency to update image, should be more than 10, default value is 30, which represents 30min.
     random:                 [optional]
@@ -35,7 +35,7 @@ Note:
 Tips:
     1. Use `python` to run this script and output log-info on the screen.
     2. Use `pythonw` to run this script in the background and output nothing, but your can use 'tasklist' and 'taskkill' to stop. 
-    3. recommendation CLI:
+    3. recommendation command:
         pythonw change_tty_image.py [settings_path] [picture_directory] [update_frequency] [random] > change_image.log
     4. Use `python change_tty_image.py -h` to get help.
 """
@@ -96,7 +96,7 @@ log('random_enabled: {}'.format(random_enabled))
 
 # get all picture path
 all_picture_path = []
-support_suffix = ('.jpg', '.png', '.jpeg')
+support_suffix = ('.jpg', '.png', '.gif')
 for r, dl, fl in os.walk(picture_directory,):
     for f in fl:
         is_ok = functools.reduce(lambda a, b : a or b, map(lambda x: f.endswith(x), support_suffix))
@@ -120,7 +120,7 @@ assert flag, "please initial your windows-terminal settings file first, add {} v
 
 log('all_picture_path : {}'.format(all_picture_path))
 
-# back up just 1 time
+# back up
 if not os.path.exists(backup_setting_path):
     cmd = "copy {} {}".format(settings_path, backup_setting_path)
     os.popen(cmd)

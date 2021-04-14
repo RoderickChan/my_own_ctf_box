@@ -22,7 +22,6 @@
 print(__doc__)
 
 from pwn import *
-from LibcSearcher import LibcSearcher
 import click
 from collections import OrderedDict
 import sys
@@ -133,6 +132,8 @@ def __set_value():
 
     # 更新context
     context.update(log_level=all_parsed_args['pwn_log_level'])
+    for key, val in all_parsed_args.items():
+        setattr(all_parsed_args, key, val)
 
     
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
