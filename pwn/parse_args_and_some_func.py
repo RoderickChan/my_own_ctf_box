@@ -132,6 +132,7 @@ def __set_value():
 
     # 更新context
     context.update(log_level=all_parsed_args['pwn_log_level'])
+    # setattr
     for key, val in all_parsed_args.items():
         setattr(all_parsed_args, key, val)
 
