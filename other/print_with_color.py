@@ -50,7 +50,7 @@ def __check(font_color:int, background_color:int, terminal_mode:int) -> bool:
 def get_str_with_color(print_str:str, *,
                        font_color:int=FontColor.WHITE, 
                        background_color:int=BackgroundColor.NOCOLOR, 
-                       terminal_mode:int=TerminalMode.DEFAULT)-> str:
+                       terminal_mode:int=TerminalMode.DEFAULT) -> str:
     """Decorate a string with color
 
     Args:

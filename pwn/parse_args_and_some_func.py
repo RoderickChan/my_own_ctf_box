@@ -3,10 +3,11 @@
 本脚本为pwn题所编写，利用click模块配置命令行参数，
 能方便地进行本地调试和远程解题。
 本地命令示例：
-    python3 exp.py filename --tmux 1 --gdb-breakpoint 0x804802a --gdb-breakpoint printf
-    python3 exp.py filename -t 1 -gb 0x804802a -gb printf
-    python3 exp.py filename -t 1 -gs "x /12gx \$rebase(0x202080)" -sf 0 -pl "warn"
-    python3 exp.py filename -w 1 -gb printf
+    python3 exp.py filename --tmux 1 --gdb-breakpoint "\$rebase(0xda0)" # 配合pwndbg调试开启PIE的程序
+    python3 exp.py filename -t 1 -gb 0x804802a -gb printf # 打两个断点
+    python3 exp.py filename -t 1 -gs "./script" # 使用gdb脚本的路径，可以自定义命令
+    python3 exp.py filename -t 1 -gs "x /12gx \$rebase(0x202080)" -sf 0 -pl "warn" # 任意要加载的gdb语句
+    python3 exp.py filename -w 1 -gs "b malloc;b free\\nb puts" # 多个gdb调试语句使用';'或者'\\n'分割，并使用open-wsl.exe调试，仅限用于WSL
     即可开始本地调试,并且会断在地址或函数处。
     注意：先启动tmux后，--tmux才会有效。安装了open-wsl.exe，-w参数才会有效。
 
@@ -14,7 +15,7 @@
     python3 exp.py filename -i 127.0.0.1 -p 22164
     可以连接指定的IP和端口。目前在刷buuctf上的题，所以填了默认ip，只指定端口即可。
 
-修改后，本脚本只提供对外接口，使用方式为：from parse_args_and_some_func import *
+本脚本只提供对外接口，使用方式为：from parse_args_and_some_func import *
 通过all_parsed_args访问所有的参数，包括本地或远程的io
 ==========================================================================================
 
@@ -34,18 +35,19 @@ all_parsed_args =OrderedDict([('filename', None), # 要执行的二进制文件�
             ('tmux_enable', 0), # 是否开启tmux终端，使用gdb.attach(io)的方式
             ('open_wsl_exe', 0), # open-wsl.exe是否开启
             ('gdb_breakpoint', None), # 当tmux或者open-wsl.exe开启的时候，b开头的断点的设置，是一个list
-            ('gdb_script', None), # tmux或者open-wsl.exe开启的时候，自定义脚本的设置
+            ('gdb_script', None), # tmux或者open-wsl.exe开启的时候，自定义脚本的设置，可以为文件路径
             ('ip', None), # 远程连接的IP
             ('port', None), # 远程连接的端口
             ('local_log', 1), # 本地LOG函数是否开启
             ('pwn_log_level', 'debug'), # pwntools的log级别设置
             ('stop_function_enable', 1),  # STOP方法是否开启
             ('io', None), # process or remote object
-            ('cur_elf', None) # current elf file
+            ('cur_elf', None), # current elf file
+            ('cur_libc', None) # current libc
             ])
 
 # 不打印的名单，不会通过print_parsed_args_info打印出来
-not_print_list = ('io', 'cur_elf')
+not_print_list = ('io', 'cur_elf', 'cur_libc')
 
 # 默认的远程ip, 只指定port的时候会默认赋值
 __default_ip = 'node3.buuoj.cn'
@@ -103,6 +105,8 @@ def __set_value():
     global all_parsed_args
     if all_parsed_args['debug_enable']:
         all_parsed_args['io'] = process('{}'.format(all_parsed_args['filename']))
+        all_parsed_args['cur_elf'] = all_parsed_args['io'].elf
+        all_parsed_args['cur_libc'] = all_parsed_args['cur_elf'].libc
     else:
         all_parsed_args['io'] = remote(all_parsed_args['ip'], all_parsed_args['port'])
 
@@ -121,14 +125,13 @@ def __set_value():
                     tmp_all_gdb += "b *{}\n".format(gb) # 带上*
                 else: # 传入函数
                     tmp_all_gdb += "b {}\n".format(gb) # 不带*
-        if all_parsed_args['gdb_script'] is not None:
+        if all_parsed_args['gdb_script'] is not None and (not os.path.exists(all_parsed_args['gdb_script'])):
             tmp_all_gdb += all_parsed_args['gdb_script'].replace("\\n", "\n").replace(";", "\n") + "\n"
         tmp_all_gdb += "c\n"
+        # 如果gdb_script为文件的话, 替换为文件句柄
+        if os.path.exists(all_parsed_args['gdb_script']) and os.path.isfile(all_parsed_args['gdb_script']):
+            tmp_all_gdb = open(all_parsed_args['gdb_script'])
         gdb.attach(all_parsed_args['io'], gdbscript=tmp_all_gdb)
-
-    if all_parsed_args['filename']:
-        all_parsed_args['cur_elf'] = ELF('{}'.format(all_parsed_args['filename']))
-        log.info('[+] libc used ===> {}'.format(all_parsed_args['cur_elf'].libc))
 
     # 更新context
     context.update(log_level=all_parsed_args['pwn_log_level'])
@@ -144,7 +147,7 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 @click.option('-t', '--tmux', default=False, type=bool, nargs=1, help='Excute program at tmux or not. Default value: False.')
 @click.option('-w', '--open-wsl', default=False, type=bool, nargs=1, help='Excute program at open-wsl.exe or not. Default value: False.')
 @click.option('-gb', '--gdb-breakpoint', default=[], type=str, multiple=True, help="Set a gdb breakpoint while tmux or 'open-wsl.exe' is enabled, is a hex address or '\$rebase' addr or a function name. Multiple setting supported. Default value:'[]'")
-@click.option('-gs', '--gdb-script', default=None, type=str, help="Set a gdb script while tmux or 'open-wsl.exe' is enabled, the script will be passed to gdb and use '\\n' or ';' to split lines. Default value:None")
+@click.option('-gs', '--gdb-script', default=None, type=str, help="Set a gdb script while tmux or 'open-wsl.exe' is enabled, the script will be passed to gdb and use '\\n' or ';' to split lines. Besides expression, file is supported. Default value:None")
 @click.option('-i', '--ip', default=None, type=str, nargs=1, help='The remote ip addr. Default value: None.')
 @click.option('-p', '--port', default=None, type=int, nargs=1, help='The remote port. Default value: None.')
 @click.option('-ll', '--local-log', default=True, type=bool, nargs=1, help='Set local log enabled or not. Default value: True.')
@@ -206,14 +209,132 @@ def STOP():
     """程序暂停，按任意键继续"""
     if not all_parsed_args['stop_function_enable']:
         return
-    print("stop at line...{} pid:{}".format(sys._getframe().f_lineno, proc.pidof(all_parsed_args['io'])))
+    print("stop ... pid:{}".format(proc.pidof(all_parsed_args['io'])))
     pause()
+
+
+############### 定义一些功能函数 ###############
+# 带颜色打印字符串
+class FontColor:
+    BLACK = 30
+    RED = 31
+    GREEN = 32
+    YELLO = 33
+    BLUE = 34
+    AMARANTH = 35
+    CYAN = 36
+    WHITE = 37
+    
+class BackgroundColor:
+    NOCOLOR = -1
+    BLACK = 40
+    RED = 41
+    GREEN = 42
+    YELLO = 43
+    BLUE = 44
+    AMARANTH = 45
+    CYAN = 46
+    WHITE = 47
+    
+class TerminalMode:
+    DEFAULT = 0
+    HIGHLIGHT = 1
+    UNDERLINE = 4
+    TWINKLE = 5
+    ANTI_WHITE = 7
+    INVISIBLE = 8
+    
+
+def __check(font_color:int, background_color:int, terminal_mode:int) -> bool:
+    b1 = (font_color >= FontColor.BLACK and font_color <= FontColor.WHITE)
+    b2 = (background_color >= BackgroundColor.BLACK and background_color <= BackgroundColor.WHITE) or background_color == BackgroundColor.NOCOLOR
+    b3 = (terminal_mode >= TerminalMode.DEFAULT and terminal_mode <= TerminalMode.INVISIBLE and terminal_mode != 2 and terminal_mode != 3 and terminal_mode != 6)
+    return (b1 and b2 and b3)
+
+
+def get_str_with_color(print_str:str, *,
+                       font_color:int=FontColor.WHITE, 
+                       background_color:int=BackgroundColor.NOCOLOR, 
+                       terminal_mode:int=TerminalMode.DEFAULT)-> str:
+    """
+    Decorate a string with color
+
+    Args:
+        print_str (str): The str you want to modify.
+        font_color (int, optional): Font color. Defaults to FontColor.WHITE.
+        background_color (int, optional): Background color. Defaults to BackgroundColor.NOCOLOR.
+        terminal_mode (int, optional): terminal mode. Defaults to TerminalMode.DEFAULT.
+
+    Returns:
+        str: A string with elaborate decoration.
+    """
+    check = __check(font_color, background_color, terminal_mode)
+    if not check:
+        print('\033[1;31;47mWARNING: Failure to set color!\033[0m')
+        return print_str
+    if background_color == BackgroundColor.NOCOLOR:
+        background_color = ''
+    else:
+        background_color = ';'+str(background_color)
+    res_str = '\033[{};{}{}m{}\033[0m'.format(terminal_mode, font_color, background_color, print_str)
+    return res_str
+
+
+def print_color(print_str:str, *,
+                font_color:int=FontColor.WHITE, 
+                background_color:int=BackgroundColor.NOCOLOR, 
+                terminal_mode:int=TerminalMode.DEFAULT):
+    """print a string with color
+
+    Args:
+        print_str (str): The str you want to modify.
+        font_color (int, optional): Font color. Defaults to FontColor.WHITE.
+        background_color (int, optional): Background color. Defaults to BackgroundColor.NOCOLOR.
+        terminal_mode (int, optional): terminal mode. Defaults to TerminalMode.DEFAULT.
+
+    """
+    print(get_str_with_color(print_str, font_color=font_color, background_color=background_color, terminal_mode=terminal_mode))
+    
+#################### END ########################
 
 
 ############### 定义一些偏函数 ###################
 int16 = functools.partial(int, base=16)
 int8 = functools.partial(int, base=8)
 int2 = functools.partial(int, base=2)
+
+# r-g-b str
+red_str = functools.partial(get_str_with_color, 
+                    font_color=FontColor.RED, 
+                    background_color=BackgroundColor.NOCOLOR, 
+                    terminal_mode=TerminalMode.DEFAULT)
+
+green_str = functools.partial(get_str_with_color, 
+                    font_color=FontColor.GREEN, 
+                    background_color=BackgroundColor.NOCOLOR, 
+                    terminal_mode=TerminalMode.DEFAULT)
+
+blue_str = functools.partial(get_str_with_color, 
+                    font_color=FontColor.BLUE, 
+                    background_color=BackgroundColor.NOCOLOR, 
+                    terminal_mode=TerminalMode.DEFAULT) 
+
+
+# r-g-b print
+print_red = functools.partial(print_color, 
+                    font_color=FontColor.RED, 
+                    background_color=BackgroundColor.NOCOLOR, 
+                    terminal_mode=TerminalMode.DEFAULT)
+
+print_green = functools.partial(print_color, 
+                    font_color=FontColor.GREEN, 
+                    background_color=BackgroundColor.NOCOLOR, 
+                    terminal_mode=TerminalMode.DEFAULT)
+
+print_blue = functools.partial(print_color, 
+                    font_color=FontColor.BLUE, 
+                    background_color=BackgroundColor.NOCOLOR, 
+                    terminal_mode=TerminalMode.DEFAULT)
 #################### END ########################
 
 
@@ -258,3 +379,4 @@ def sleep_call(second:int=1, mod:int=1):
     return wrapper1
 
 #################### END ########################
+

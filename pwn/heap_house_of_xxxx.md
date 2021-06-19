@@ -131,14 +131,12 @@ if ((unsigned long)(size) <= (unsigned long)(get_max_fast ()) // 判断是否处
 
 图示利用效果：
 
-![housrofxxx](https://lynne-markdown.oss-cn-hangzhou.aliyuncs.com/img/housrofxxx.png)
+![housrofspirit1](https://lynne-markdown.oss-cn-hangzhou.aliyuncs.com/img/housrofspirit1.png)
 
 #### 知识扩充
 
 - 如果利用的版本为`libc-2.27.so`，即存在`tcache`机制的版本中，会先把`chunk`放在`tcachebin`中。如果对应的`tcachebin`没有放满，走这个分支的话，就不涉及到对`next_chunk`的检查，其他检查还仍然存在
-- 可以先将对应的`tcachebin`放满后，在实行`house of spirit`攻击
-
-
+- 可以先将对应的`tcachebin`放满后，再施行`house of spirit`攻击
 
 ### house of einherjar
 
