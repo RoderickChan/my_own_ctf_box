@@ -8,7 +8,7 @@
 
 #### 利用原理
 
-覆盖堆指针变量，在内存可控区域构造数据，然后将可控区域释放到`fastbin`中，之后再将这块内存申请出来覆盖可控区域的其他内存内容。
+该方法主要针对`fastbin`，通过覆盖堆指针变量，在内存可控区域构造数据，然后将可控区域释放到`fastbin`中，之后再将这块内存申请出来控制可控区域上方或下方的其他内存内容。
 
 #### 利用场景
 
@@ -20,11 +20,11 @@
 
 ##### 利用步骤
 
-- 伪造`fake fastbin chunk`，注意伪造好`size`，必须要使`fake chunk`落在`global_max_fast`范围内
+- 伪造`fake fastbin chunk`，使其能绕过系统检查，注意要使`fake chunk`落在`global_max_fast`范围内
 - 修改堆指针变量，或者利用数组越界等漏洞，释放`fake chunk`
 - 申请回`fake chunk`，修改其他目标区域
 
-##### 绕过限制
+##### 限制条件
 
 需要注意以下几点：
 
@@ -136,15 +136,73 @@ if ((unsigned long)(size) <= (unsigned long)(get_max_fast ()) // 判断是否处
 #### 知识扩充
 
 - 如果利用的版本为`libc-2.27.so`，即存在`tcache`机制的版本中，会先把`chunk`放在`tcachebin`中。如果对应的`tcachebin`没有放满，走这个分支的话，就不涉及到对`next_chunk`的检查，其他检查还仍然存在
-- 可以先将对应的`tcachebin`放满后，再施行`house of spirit`攻击
+
+- 对于含有`tcache`的版本，可以先将对应的`tcachebin`放满后，再施行`house of spirit`攻击
+
+- 如果伪造的`chunk`的大小大于`global_max_fast`，那么当释放假的`chunk`的时候，布局应该如下：
+
+  ![image-20210627175358157](https://lynne-markdown.oss-cn-hangzhou.aliyuncs.com/img/image-20210627175358157.png)
+
+  这是因为，对于将要放置在`unsorted bin`中的`chunk`，首先会尝试后向合并，然后尝试前向合并，合并过程会触发`unlink`，之后才会放置在`unsorted bin`中。
 
 ### house of einherjar
 
 
 
+### house of roman
 
+#### 利用原理
 
+使用`fastbin attack`与`unsorted bin`结合，低字节爆破`12bit`修改`main_arena+88`这个地址为`one_gadget`，通过劫持`malloc_hook`或其他可控的`hook`变量，最终获取`shell`。
 
+#### 利用场景
+
+该方法需要爆破`12bit`，成功率为`1 / 4096`，不到万不得已，最好不要使用，因为可能需要爆破很久。
+
+- 程序中不存在泄露地址的函数，或者无法泄露地址
+- 存在`UAF`，或者能残留地址
+- 能够使用`fastbin attack`和`unsorted bin attack`
+
+#### 利用方法
+
+##### 利用步骤
+
+- 首先使用`fastbin`和`unsorted bin`构造堆布局，使得`fastbin 0x70`这条链最后一个元素的`fd`指向`main_arena+88`。这一步，有两种布局方式。
+
+  - 方法一：
+    - 释放`0x70`的`chunk A`
+    - 修改已释放的`chunk A`的`size`为`0x91`，做好堆布局
+    - 再释放`1`次`chunk A`，即可完成堆布局
+  - 方法二：
+    - 依次释放两个`0x70`的`chunk A`和`chunk B`，此时的链为`B ---> A`。
+    - 释放一个`0x90`的`chunk C`，其会被放置在`unsorted bin`中，`fd`和`bk`会被更新为`main_arena+ 88`
+    - 分配走`0x20`大小的`chunk D` ，则此时`chunk C`大小为`0x70`，`fd`和`bk`不变
+    - `partial overwrite`此时的`chunk B`的`fd`指针，使其指向`chunk C`即可完成堆布局
+
+  ![housrofxxx-housr of roman](https://lynne-markdown.oss-cn-hangzhou.aliyuncs.com/img/housrofxxx-housr%20of%20roman.png)
+
+- 爆破`4bit`修改`main_arena + 88`这个值，修改为`&__malloc_hook - 0x23`，即可在`__malloc_hook`上方分配`0x70`的`fake chunk`
+
+- 使用`fastbin`分配到`fake chunk`，此时已经能修改`__malloc_hook`的值
+
+- 使用`unsorted bin attack`将`__malloc_hook`写为`unsorted_chunks (av)`，也就是`main_arena + 88`
+
+- 利用上面分配的`fake chunk`爆破`8bit`修改`main_arena + 88`为`one_gadget`
+
+- 再次调用`malloc`时即可获取`shell`
+
+##### 限制条件
+
+如果满足利用场景的话，基本上不存在限制条件。唯一可能很坑的是，每个`one_gadget`最终都不滿足触发条件。这个时候，可以观察一下寄存器的值，看哪些寄存器可用，再找找合适的`gadget`。
+
+#### 利用效果
+
+![housrofxxx-housr of roman2](https://lynne-markdown.oss-cn-hangzhou.aliyuncs.com/img/housrofxxx-housr%20of%20roman2.png)
+
+#### 知识扩充
+
+- `house of roman`主要是提供了一种思想：利用已有的程序地址，结合`partial overwrite`绕过随机化。所以，除了去修改`__malloc_hook`，还有劫持`IO_FILE`的`vtable`再结合`partial overwrite`控制`IO`类函数的执行流的方法。其思路均与`house of roman`一致
+  - 充分利用`malloc`不会清空信息的特性来构造堆布局，而`calloc`的`chunk`，若其`M`位为`1`，则也不会清空`chunk`
 
 ### 参考与引用
 

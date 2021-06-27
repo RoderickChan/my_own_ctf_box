@@ -196,7 +196,7 @@ if len(sys.argv) > 1:
 
 __set_value()
 
-# 定义一些函数
+############### 定义一些功能函数 ###############
 def LOG_ADDR(addr_name:str, addr:int):
     """使用log.success打印地址"""
     if all_parsed_args['local_log']:
@@ -213,7 +213,6 @@ def STOP():
     pause()
 
 
-############### 定义一些功能函数 ###############
 # 带颜色打印字符串
 class FontColor:
     BLACK = 30

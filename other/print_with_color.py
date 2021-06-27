@@ -88,7 +88,7 @@ def print_color(print_str:str, *,
 
     """
     print(get_str_with_color(print_str, font_color=font_color, background_color=background_color, terminal_mode=terminal_mode))
-    
+
 
 # make rgb print func
 
