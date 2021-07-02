@@ -5,7 +5,6 @@ __pycache__/
 
 # C extensions
 *.so
-draw/
 # Distribution / packaging
 .Python
 build/
@@ -131,5 +130,7 @@ dmypy.json
 # vs_code
 .vscode/
 
-# 
+# 自定义
 test.*
+draw/
+.*
